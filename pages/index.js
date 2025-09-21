@@ -37,26 +37,26 @@ export default function Home() {
       weight: {
         value: weight,
         standard: hsraStandards.maxWeight,
-        passes: weight <= hsraStandards.maxWeight,
-        message: weight <= hsraStandards.maxWeight ? 'PASS' : `FAIL - Exceeds ${hsraStandards.maxWeight} lbs`
+        passes: !isNaN(weight) && weight <= hsraStandards.maxWeight,
+        message: !isNaN(weight) && weight <= hsraStandards.maxWeight ? 'PASS' : `FAIL - ${isNaN(weight) ? 'Invalid value' : 'Exceeds ' + hsraStandards.maxWeight + ' lbs'}`
       },
       wheelbase: {
         value: wheelbase,
         standard: hsraStandards.minWheelbase,
-        passes: wheelbase >= hsraStandards.minWheelbase,
-        message: wheelbase >= hsraStandards.minWheelbase ? 'PASS' : `FAIL - Below ${hsraStandards.minWheelbase} inches`
+        passes: !isNaN(wheelbase) && wheelbase >= hsraStandards.minWheelbase,
+        message: !isNaN(wheelbase) && wheelbase >= hsraStandards.minWheelbase ? 'PASS' : `FAIL - ${isNaN(wheelbase) ? 'Invalid value' : 'Below ' + hsraStandards.minWheelbase + ' inches'}`
       },
       height: {
         value: height,
         standard: hsraStandards.maxHeight,
-        passes: height <= hsraStandards.maxHeight,
-        message: height <= hsraStandards.maxHeight ? 'PASS' : `FAIL - Exceeds ${hsraStandards.maxHeight} inches`
+        passes: !isNaN(height) && height <= hsraStandards.maxHeight,
+        message: !isNaN(height) && height <= hsraStandards.maxHeight ? 'PASS' : `FAIL - ${isNaN(height) ? 'Invalid value' : 'Exceeds ' + hsraStandards.maxHeight + ' inches'}`
       },
       engine: {
         value: engine,
         standard: hsraStandards.maxEngineDisplacement,
-        passes: engine <= hsraStandards.maxEngineDisplacement,
-        message: engine <= hsraStandards.maxEngineDisplacement ? 'PASS' : `FAIL - Exceeds ${hsraStandards.maxEngineDisplacement} cubic inches`
+        passes: !isNaN(engine) && engine <= hsraStandards.maxEngineDisplacement,
+        message: !isNaN(engine) && engine <= hsraStandards.maxEngineDisplacement ? 'PASS' : `FAIL - ${isNaN(engine) ? 'Invalid value' : 'Exceeds ' + hsraStandards.maxEngineDisplacement + ' cubic inches'}`
       }
     };
 
