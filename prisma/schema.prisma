@@ -1,0 +1,109 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Car {
+  id          String   @id @default(cuid())
+  name        String
+  make        String
+  model       String
+  year        Int
+  vin         String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relationships
+  metrics     Metric[]
+  recommendations Recommendation[]
+  
+  @@map("cars")
+}
+
+model MetricCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  color       String?  // For UI display
+  
+  // Relationships
+  metrics     Metric[]
+  
+  @@map("metric_categories")
+}
+
+model Metric {
+  id          String   @id @default(cuid())
+  carId       String
+  categoryId  String
+  name        String
+  value       Float
+  unit        String?
+  timestamp   DateTime @default(now())
+  notes       String?
+  
+  // Physical or Electronic modification type
+  type        MetricType @default(PHYSICAL)
+  
+  // Location/component affected
+  component   String?
+  
+  // Relationships
+  car         Car @relation(fields: [carId], references: [id], onDelete: Cascade)
+  category    MetricCategory @relation(fields: [categoryId], references: [id])
+  recommendations Recommendation[]
+  
+  @@map("metrics")
+}
+
+model Recommendation {
+  id          String   @id @default(cuid())
+  carId       String
+  metricId    String?  // Optional - can be general recommendation
+  title       String
+  description String
+  change      String   // What should be changed
+  expectedImpact String // Expected result
+  priority    Priority @default(MEDIUM)
+  status      RecommendationStatus @default(PENDING)
+  
+  // Mechanic response
+  response    String?
+  respondedAt DateTime?
+  respondedBy String?  // Mechanic name/id
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relationships
+  car         Car @relation(fields: [carId], references: [id], onDelete: Cascade)
+  metric      Metric? @relation(fields: [metricId], references: [id])
+  
+  @@map("recommendations")
+}
+
+enum MetricType {
+  PHYSICAL
+  ELECTRONIC
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RecommendationStatus {
+  PENDING
+  ACCEPTED
+  DENIED
+  IMPLEMENTED
+}
