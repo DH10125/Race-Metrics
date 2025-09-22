@@ -1,225 +1,332 @@
-import { useState } from 'react';
-import Head from 'next/head';
+import { useState, useEffect } from 'react';
+import Layout from '../components/Layout';
+import { SessionManager, PerformanceDataManager, DataAnalyzer } from '../utils/dataManager';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
-export default function Home() {
-  const [carData, setCarData] = useState({
-    weight: '',
-    wheelbase: '',
-    trackWidth: '',
-    height: '',
-    engineDisplacement: ''
+export default function Dashboard() {
+  const [sessions, setSessions] = useState([]);
+  const [recentData, setRecentData] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
+  const [stats, setStats] = useState({
+    totalSessions: 0,
+    totalLaps: 0,
+    bestLapTime: null,
+    avgLapTime: null
   });
 
-  const [results, setResults] = useState(null);
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
 
-  const hsraStandards = {
-    maxWeight: 2500, // lbs
-    minWheelbase: 90, // inches
-    maxHeight: 60, // inches
-    maxEngineDisplacement: 350 // cubic inches
+  const loadDashboardData = () => {
+    // Load sessions
+    const allSessions = SessionManager.getAllSessions();
+    setSessions(allSessions.slice(-5)); // Show last 5 sessions
+
+    // Calculate overall stats
+    let totalLaps = 0;
+    let allLapTimes = [];
+    let allPerformanceData = [];
+
+    allSessions.forEach(session => {
+      const performanceData = PerformanceDataManager.getPerformanceData(session.id);
+      allPerformanceData = [...allPerformanceData, ...performanceData];
+      
+      const lapTimes = performanceData
+        .filter(data => data.lapTime)
+        .map(data => parseFloat(data.lapTime))
+        .filter(time => !isNaN(time));
+      
+      totalLaps += lapTimes.length;
+      allLapTimes = [...allLapTimes, ...lapTimes];
+    });
+
+    const bestLap = allLapTimes.length > 0 ? Math.min(...allLapTimes) : null;
+    const avgLap = allLapTimes.length > 0 
+      ? allLapTimes.reduce((sum, time) => sum + time, 0) / allLapTimes.length 
+      : null;
+
+    setStats({
+      totalSessions: allSessions.length,
+      totalLaps,
+      bestLapTime: bestLap,
+      avgLapTime: avgLap
+    });
+
+    // Get recent performance data for charts
+    const recentPerformanceData = allPerformanceData
+      .slice(-20)
+      .map((data, index) => ({
+        index: index + 1,
+        lapTime: parseFloat(data.lapTime) || 0,
+        engineTemp: parseFloat(data.engineMetrics?.temperature) || 0,
+        rpm: parseFloat(data.engineMetrics?.rpm) || 0
+      }));
+
+    setRecentData(recentPerformanceData);
+
+    // Generate recommendations
+    if (allSessions.length > 0) {
+      const latestSession = allSessions[allSessions.length - 1];
+      const latestPerformanceData = PerformanceDataManager.getPerformanceData(latestSession.id);
+      const recs = DataAnalyzer.generateRecommendations(latestSession, latestPerformanceData);
+      setRecommendations(recs);
+    }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setCarData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+  const formatTime = (seconds) => {
+    if (!seconds) return 'N/A';
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = (seconds % 60).toFixed(3);
+    return `${minutes}:${remainingSeconds.padStart(6, '0')}`;
   };
 
-  const validateCar = () => {
-    const weight = parseFloat(carData.weight);
-    const wheelbase = parseFloat(carData.wheelbase);
-    const height = parseFloat(carData.height);
-    const engine = parseFloat(carData.engineDisplacement);
-
-    const validation = {
-      weight: {
-        value: weight,
-        standard: hsraStandards.maxWeight,
-        passes: weight <= hsraStandards.maxWeight,
-        message: weight <= hsraStandards.maxWeight ? 'PASS' : `FAIL - Exceeds ${hsraStandards.maxWeight} lbs`
-      },
-      wheelbase: {
-        value: wheelbase,
-        standard: hsraStandards.minWheelbase,
-        passes: wheelbase >= hsraStandards.minWheelbase,
-        message: wheelbase >= hsraStandards.minWheelbase ? 'PASS' : `FAIL - Below ${hsraStandards.minWheelbase} inches`
-      },
-      height: {
-        value: height,
-        standard: hsraStandards.maxHeight,
-        passes: height <= hsraStandards.maxHeight,
-        message: height <= hsraStandards.maxHeight ? 'PASS' : `FAIL - Exceeds ${hsraStandards.maxHeight} inches`
-      },
-      engine: {
-        value: engine,
-        standard: hsraStandards.maxEngineDisplacement,
-        passes: engine <= hsraStandards.maxEngineDisplacement,
-        message: engine <= hsraStandards.maxEngineDisplacement ? 'PASS' : `FAIL - Exceeds ${hsraStandards.maxEngineDisplacement} cubic inches`
-      }
-    };
-
-    setResults(validation);
+  const createNewSession = () => {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/logging';
+    }
   };
-
-  const overallPass = results && Object.values(results).every(result => result.passes);
 
   return (
-    <div>
-      <Head>
-        <title>Race Metrics - HSRA Standards Checker</title>
-        <meta name="description" content="A tool to review and modify a racecar that meets HSRA standards" />
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
-
-      <main style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto', fontFamily: 'Arial, sans-serif' }}>
-        <h1 style={{ color: '#333', textAlign: 'center' }}>Race Metrics</h1>
-        <p style={{ textAlign: 'center', color: '#666', marginBottom: '2rem' }}>
-          A tool to review and modify a racecar that meets HSRA standards
-        </p>
-
-        <div style={{ backgroundColor: '#f5f5f5', padding: '1.5rem', borderRadius: '8px', marginBottom: '2rem' }}>
-          <h2 style={{ marginTop: 0 }}>Car Specifications</h2>
-          
-          <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                Weight (lbs):
-              </label>
-              <input
-                type="number"
-                name="weight"
-                value={carData.weight}
-                onChange={handleInputChange}
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
-                placeholder="e.g., 2200"
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                Wheelbase (inches):
-              </label>
-              <input
-                type="number"
-                name="wheelbase"
-                value={carData.wheelbase}
-                onChange={handleInputChange}
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
-                placeholder="e.g., 95"
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                Track Width (inches):
-              </label>
-              <input
-                type="number"
-                name="trackWidth"
-                value={carData.trackWidth}
-                onChange={handleInputChange}
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
-                placeholder="e.g., 58"
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                Height (inches):
-              </label>
-              <input
-                type="number"
-                name="height"
-                value={carData.height}
-                onChange={handleInputChange}
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
-                placeholder="e.g., 48"
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                Engine Displacement (cubic inches):
-              </label>
-              <input
-                type="number"
-                name="engineDisplacement"
-                value={carData.engineDisplacement}
-                onChange={handleInputChange}
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
-                placeholder="e.g., 305"
-              />
-            </div>
+    <Layout title="Dashboard - Race Metrics Pro">
+      <div style={{ display: 'grid', gap: '2rem' }}>
+        {/* Header Section */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1 style={{ margin: 0, color: '#1f2937', fontSize: '2rem' }}>Performance Dashboard</h1>
+            <p style={{ margin: '0.5rem 0 0 0', color: '#6b7280' }}>
+              Real-time insights for your GM 3.8L FWD racing performance
+            </p>
           </div>
-
           <button
-            onClick={validateCar}
+            onClick={createNewSession}
             style={{
-              marginTop: '1.5rem',
-              padding: '0.75rem 2rem',
-              backgroundColor: '#007cba',
+              padding: '0.75rem 1.5rem',
+              backgroundColor: '#059669',
               color: 'white',
               border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
+              borderRadius: '8px',
               fontSize: '1rem',
-              fontWeight: 'bold'
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
             }}
           >
-            Check HSRA Compliance
+            Start New Session
           </button>
         </div>
 
-        {results && (
-          <div style={{ backgroundColor: overallPass ? '#d4edda' : '#f8d7da', padding: '1.5rem', borderRadius: '8px', border: `1px solid ${overallPass ? '#c3e6cb' : '#f5c6cb'}` }}>
-            <h2 style={{ marginTop: 0, color: overallPass ? '#155724' : '#721c24' }}>
-              Validation Results: {overallPass ? 'PASSES HSRA Standards' : 'FAILS HSRA Standards'}
-            </h2>
-            
+        {/* Stats Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '1.5rem',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            border: '1px solid #e5e7eb'
+          }}>
+            <h3 style={{ margin: '0 0 0.5rem 0', color: '#374151', fontSize: '0.9rem', fontWeight: '600' }}>
+              Total Sessions
+            </h3>
+            <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#1f2937' }}>
+              {stats.totalSessions}
+            </p>
+          </div>
+
+          <div style={{
+            backgroundColor: 'white',
+            padding: '1.5rem',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            border: '1px solid #e5e7eb'
+          }}>
+            <h3 style={{ margin: '0 0 0.5rem 0', color: '#374151', fontSize: '0.9rem', fontWeight: '600' }}>
+              Total Laps
+            </h3>
+            <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#1f2937' }}>
+              {stats.totalLaps}
+            </p>
+          </div>
+
+          <div style={{
+            backgroundColor: 'white',
+            padding: '1.5rem',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            border: '1px solid #e5e7eb'
+          }}>
+            <h3 style={{ margin: '0 0 0.5rem 0', color: '#374151', fontSize: '0.9rem', fontWeight: '600' }}>
+              Best Lap Time
+            </h3>
+            <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#059669' }}>
+              {formatTime(stats.bestLapTime)}
+            </p>
+          </div>
+
+          <div style={{
+            backgroundColor: 'white',
+            padding: '1.5rem',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            border: '1px solid #e5e7eb'
+          }}>
+            <h3 style={{ margin: '0 0 0.5rem 0', color: '#374151', fontSize: '0.9rem', fontWeight: '600' }}>
+              Average Lap Time
+            </h3>
+            <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#1f2937' }}>
+              {formatTime(stats.avgLapTime)}
+            </p>
+          </div>
+        </div>
+
+        {/* Charts Section */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+          {/* Lap Times Chart */}
+          <div style={{
+            backgroundColor: 'white',
+            padding: '1.5rem',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            border: '1px solid #e5e7eb'
+          }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#374151' }}>Recent Lap Times</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={recentData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="index" />
+                <YAxis />
+                <Tooltip formatter={(value) => [formatTime(value), 'Lap Time']} />
+                <Line type="monotone" dataKey="lapTime" stroke="#059669" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Engine RPM Chart */}
+          <div style={{
+            backgroundColor: 'white',
+            padding: '1.5rem',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            border: '1px solid #e5e7eb'
+          }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#374151' }}>Engine RPM Trends</h3>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={recentData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="index" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="rpm" fill="#2563eb" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Recommendations Section */}
+        {recommendations.length > 0 && (
+          <div style={{
+            backgroundColor: 'white',
+            padding: '1.5rem',
+            borderRadius: '12px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            border: '1px solid #e5e7eb'
+          }}>
+            <h3 style={{ margin: '0 0 1rem 0', color: '#374151' }}>Performance Recommendations</h3>
             <div style={{ display: 'grid', gap: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', backgroundColor: 'white', borderRadius: '4px' }}>
-                <span><strong>Weight:</strong> {results.weight.value} lbs (Max: {results.weight.standard} lbs)</span>
-                <span style={{ color: results.weight.passes ? '#155724' : '#721c24', fontWeight: 'bold' }}>
-                  {results.weight.message}
-                </span>
-              </div>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', backgroundColor: 'white', borderRadius: '4px' }}>
-                <span><strong>Wheelbase:</strong> {results.wheelbase.value}" (Min: {results.wheelbase.standard}")</span>
-                <span style={{ color: results.wheelbase.passes ? '#155724' : '#721c24', fontWeight: 'bold' }}>
-                  {results.wheelbase.message}
-                </span>
-              </div>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', backgroundColor: 'white', borderRadius: '4px' }}>
-                <span><strong>Height:</strong> {results.height.value}" (Max: {results.height.standard}")</span>
-                <span style={{ color: results.height.passes ? '#155724' : '#721c24', fontWeight: 'bold' }}>
-                  {results.height.message}
-                </span>
-              </div>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem', backgroundColor: 'white', borderRadius: '4px' }}>
-                <span><strong>Engine:</strong> {results.engine.value} cu.in. (Max: {results.engine.standard} cu.in.)</span>
-                <span style={{ color: results.engine.passes ? '#155724' : '#721c24', fontWeight: 'bold' }}>
-                  {results.engine.message}
-                </span>
-              </div>
+              {recommendations.map((rec, index) => (
+                <div
+                  key={index}
+                  style={{
+                    padding: '1rem',
+                    backgroundColor: rec.priority === 'high' ? '#fef2f2' : '#f0f9ff',
+                    border: `1px solid ${rec.priority === 'high' ? '#fecaca' : '#bae6fd'}`,
+                    borderRadius: '8px'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <h4 style={{ 
+                        margin: '0 0 0.5rem 0', 
+                        color: rec.priority === 'high' ? '#dc2626' : '#0369a1',
+                        fontSize: '1rem'
+                      }}>
+                        {rec.category}
+                      </h4>
+                      <p style={{ margin: 0, color: '#374151' }}>{rec.message}</p>
+                    </div>
+                    <span style={{
+                      padding: '0.25rem 0.5rem',
+                      backgroundColor: rec.priority === 'high' ? '#dc2626' : '#0369a1',
+                      color: 'white',
+                      fontSize: '0.75rem',
+                      borderRadius: '4px',
+                      fontWeight: 'bold'
+                    }}>
+                      {rec.priority.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        <div style={{ marginTop: '2rem', padding: '1rem', backgroundColor: '#e9ecef', borderRadius: '4px' }}>
-          <h3>HSRA Standards Reference</h3>
-          <ul style={{ margin: 0 }}>
-            <li>Maximum Weight: {hsraStandards.maxWeight} lbs</li>
-            <li>Minimum Wheelbase: {hsraStandards.minWheelbase} inches</li>
-            <li>Maximum Height: {hsraStandards.maxHeight} inches</li>
-            <li>Maximum Engine Displacement: {hsraStandards.maxEngineDisplacement} cubic inches</li>
-          </ul>
+        {/* Recent Sessions */}
+        <div style={{
+          backgroundColor: 'white',
+          padding: '1.5rem',
+          borderRadius: '12px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          border: '1px solid #e5e7eb'
+        }}>
+          <h3 style={{ margin: '0 0 1rem 0', color: '#374151' }}>Recent Sessions</h3>
+          {sessions.length === 0 ? (
+            <p style={{ color: '#6b7280', fontStyle: 'italic' }}>
+              No sessions yet. Start your first racing session to see data here.
+            </p>
+          ) : (
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              {sessions.map(session => (
+                <div
+                  key={session.id}
+                  style={{
+                    padding: '1rem',
+                    backgroundColor: '#f9fafb',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <div>
+                    <h4 style={{ margin: '0 0 0.25rem 0', color: '#374151' }}>
+                      {session.name || `Session ${session.id.slice(0, 8)}`}
+                    </h4>
+                    <p style={{ margin: 0, color: '#6b7280', fontSize: '0.9rem' }}>
+                      {new Date(session.createdAt).toLocaleDateString()} - {session.trackName || 'Unknown Track'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => window.location.href = `/sessions?id=${session.id}`}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      backgroundColor: '#2563eb',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    View Details
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </main>
-    </div>
+      </div>
+    </Layout>
   );
 }
